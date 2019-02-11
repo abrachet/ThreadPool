@@ -1,0 +1,15 @@
+.vscode/
+.DS_Store
+
+testing/
+
+*.out
+*.gch
+*.o
+*.s
+*.S
+*.so
+
+*.dSYM
+
+test.c
