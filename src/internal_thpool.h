@@ -10,6 +10,12 @@
 
 #include "thpool.h"
 
+#define NORMAL_EXIT ((void*)748)
+
+extern struct _opaque_job_attr_t    __default_future_attr;
+extern struct _opaque_job_attr_t    __default_freeable_attr;
+extern struct _opaque_thpool_attr_t __default_thpool_attr;
+
 /**
  * @brief describes a job, exists in its thread_pools::job_vec for the lifetime of the 
  * threadpool
@@ -25,6 +31,9 @@ struct job {
 
     job_attr_t          attr;           ///< Attributes
 
+    pthread_mutex_t     ret_mutex;      ///< Mutex used with the cond variable. 
+                                        ///< This doesn't protect the entire mutex,
+                                        ///< only used for the condition variable
     pthread_cond_t      returned;       ///< Signaled on jobs exit, successful or otherwise
     void*               return_value;   ///< Value returned from pthread_exit(), tp_thread_exit(), or normal return
 };
@@ -44,25 +53,38 @@ struct job_list_node {
 struct job_list {
     pthread_mutex_t       mutex;    ///< Protects insertions and deletions
     pthread_cond_t        cv;       ///<
-    unsigned              sem;      ///< 
+    atomic_uint           sem;      ///< 
     struct job_list_node* head;     ///< Queue of jobs
     struct job_list_node* back;     ///< Pointer to the last element
 };
 
-
+/**
+ * @brief circularly linked list
+ * 
+ */
 struct thread_list {
     struct thread_list* next;    
     pthread_t           thread;
 };
 
 /**
+ * @brief Creates a list of size num
+ * 
+ * @param tp thread_pool pointer passed to the worker threads
+ * @param num number of nodes to create
+ * 
+ * @return struct thread_list* head of the list
+ */
+struct thread_list* thread_list_init(struct thread_pool* tp, unsigned num);
+
+/**
  * @brief
  * 
  */
 typedef struct thread_pool {
-    struct thread_list*     threads;        ///< Threads owned by the thread_pool
+    pthread_mutex_t         mutex;          ///< Undecided if this will be used
 
-    pthread_mutex_t         mutex;          ///< 
+    struct thread_list*     threads;        ///< Threads owned by the thread_pool
 
     thpool_attr_t           attr;           ///< Pools Attributes
 
@@ -81,21 +103,35 @@ typedef struct thread_pool {
 ///////////////////////////////////////////////
 ///////////////////////////////////////////////
 
+#define JOB_MUTEX_ATTR NULL
+#define JOB_COND_ATTR  NULL
+
+#define job_is_future(job) (job)->attr->return_needed
+
 /**
  * @brief Creates a new struct job
  * 
  * @param job Pointer to job struct who's fields should be initialized
  */
-void job_init(struct job* job, void* (*start_routine) (void*), void* arg, thpool_id_t id);
+
+/**
+ * @brief 
+ * 
+ * @param job job to construct
+ * @param start_routine 
+ * @param arg 
+ * @param attr attributes
+ */
+void job_init(struct job* job, void* (*start_routine) (void*), void* arg, job_attr_t attr);
 
 /**
  * @brief signals the condition variable that it has returned, sets its status accordingly
  * and assigns its return value
  * 
  * @param job the finishing job
- * @param arg return value of the job
+ * @param ret return value of the job
  */
-void job_return(struct job* job, void* arg);
+void job_return(struct job* job, void* ret);
 
 /**
  * @brief destroys a job and releases its resources if possible. It is considered possible
@@ -144,7 +180,18 @@ void job_list_push(struct job_list* list, struct job* job);
  * @brief returns the next job in the queue, or NULL if the request has timed out.
  * The wait time 
  * 
- * @param list 
- * @return struct job* 
+ * @param list list to pop from
+ * @param miliseconds miliseconds to wait for
+ * @return struct job* the job from the list
  */
-struct job* job_list_pop(struct job_list* list);
+struct job* job_list_pop(struct job_list* list, unsigned miliseconds);
+
+
+/// probably should just make this a macro
+/**
+ * @brief add's mili miliseconds to add from the current time
+ * 
+ * @param add timespec to be created
+ * @param mili number of miliseconds from the current system time
+ */
+void add_mili(struct timespec* add, unsigned mili);

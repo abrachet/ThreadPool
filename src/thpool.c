@@ -1,62 +1,107 @@
-#include "internal_thpool.h"
+/**
+ * @file thpool.c
+ * @author your name (you@domain.com)
+ * @brief Implementations of the public facing routines for the thread pool
+ * @version 0.1
+ * @date 2019-02-12
+ * 
+ * @copyright Copyright (c) 2019
+ * 
+ */
 #include "thpool.h"
-#include "tp_thread.h"
+#include "internal_thpool.h"
 
-#include <setjmp.h>
+#include <stdlib.h>
 
-// just a random number to know that the thread exited normall
-#define NORMAL_EXIT ((void*)748)
+#include <signal.h>
 
-static struct job* 
-get_job(struct thread_pool* th)
+#include <assert.h>
+#include <errno.h>
+
+static struct job*
+thpool_do_queue(thread_pool* _Nonnull thpool, void* (* _Nonnull start_routine)(void*), 
+        void* arg, job_attr_t attr _Nullable)
 {
-    return NULL;
+    struct job* job = malloc(sizeof(struct job));
+
+    job_init(job, start_routine, arg, attr);
+
+    job_list_push(&thpool->job_list, job);
+
+    return job;
 }
 
-static void
-cleanup_routine(void* arg)
+thpool_id_t
+thpool_queue(thread_pool* thpool, void* (* start_routine)(void*), 
+        void* arg, job_attr_t attr _Nullable)
 {
-    struct thread_pool* thpool = (struct thread_pool*) arg;
-
-    // notify thread_pool to create another thread_pool if
-    // the queue is larger than the number of threads
-}
-
-
-static _Thread_local jmp_buf thlocal_jmp;
-
-static void 
-thpool_kill_handler(int sig)
-{
-    longjmp(thlocal_jmp, 0);
-}
-
-static void*
-worker(void* arg) 
-{
-    struct thread_pool* thpool = (struct thread_pool*) arg;
-
-    thpool->num_threads++;
-
-    pthread_cleanup_push(&cleanup_routine, thpool);
-
-    (void) setjmp(thlocal_jmp);
-    signal(SIGTHPKILL, &thpool_kill_handler);
-
-    for (;;) {
-        if (thpool_removing_threads(thpool))
-            break;
-           
-        struct job* current_job = get_job(thpool);
-
-        (void) pthread_mutex_lock(&current_job->mutex);
-        current_job->return_value = current_job->start_routine(current_job->arg);
-
-        (void) pthread_cond_signal(&current_job->returned);
-        (void) pthread_mutex_unlock(&current_job->mutex);
+    if (!thpool || !start_routine) {
+        errno = EINVAL;
+        return NULL;
     }
 
-    pthread_cleanup_pop(true);
+    if (!attr) 
+        attr = &__default_freeable_attr;
+    
+    return thpool_do_queue(thpool, start_routine, arg, attr);
+}
 
-    return NORMAL_EXIT;
+thpool_future_t 
+thpool_async(thread_pool* thpool, void* (*start_routine)(void*), 
+        void* arg, job_attr_t attr _Nullable)
+{
+    if (!thpool || !start_routine) {
+        errno = EINVAL;
+        return NULL;
+    }
+
+    if (!attr)
+        attr = &__default_future_attr;
+
+    return thpool_do_queue(thpool, start_routine, arg, attr);
+}
+
+
+tp_job_status_t 
+thp_thread_status(thread_pool* pool, thpool_id_t id)
+{
+    return ((struct job*)id)->status;
+}
+
+void* 
+thpool_await(thread_pool* pool, thpool_future_t future)
+{
+    struct job* job = (struct job*) future;
+
+    if ( pthread_mutex_trylock(&job->ret_mutex) ) {
+        // TODO change this later to actually check errno, 
+        // for now it should always be because of EBUSY
+        assert(errno == EBUSY);
+        return (void*) -1;
+    } 
+
+    if (job->status != TPS_RETURNED)
+        pthread_cond_wait(&job->returned, &job->ret_mutex);
+
+    // it should have called job_return which should have set this
+    assert(job->status == TPS_RETURNED);
+
+    return job->return_value;
+}
+
+tp_job_status_t 
+thp_thread_stop(thread_pool* pool, thpool_id_t id)
+{
+    struct job* job = (struct job*) id;
+
+    tp_job_status_t status = job->status;
+
+    pthread_kill(job->thread_id, SIGUSR1);
+    
+    // its status gets changed by the SIGUSR1 signal handler
+    // so we don't need to change it back here
+
+    assert(job->status == TPS_KILLED);
+
+    return status;
 }

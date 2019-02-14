@@ -1,11 +1,12 @@
 #include "internal_thpool.h"
 #include "thpool.h"
-#include "tp_thread.h"
+//#include "tp_thread.h"
 
 #include <setjmp.h>
+#include <signal.h>
 
 // just a random number to know that the thread exited normall
-#define NORMAL_EXIT ((void*)748)
+
 
 static struct job* 
 get_job(struct thread_pool* th)
@@ -41,7 +42,7 @@ worker(void* arg)
     pthread_cleanup_push(&cleanup_routine, thpool);
 
     (void) setjmp(thlocal_jmp);
-    signal(SIGTHPKILL, &thpool_kill_handler);
+    signal(SIGUSR1, &thpool_kill_handler);
 
     for (;;) {
         if (thpool_removing_threads(thpool))

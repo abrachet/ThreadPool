@@ -1,10 +1,42 @@
+/**
+ * Alex Brachet-Mialot
+ *
+ * This file provides internal functions for the thread pool
+ * These functions will eventually be almost all static but I am just
+ * waiting until I figure the structure of the project out better before
+ * It's not a namespace pollution issue as much as a small optimization
+ */
 #include "internal_thpool.h"
+#include "thpool.h"
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#include <semaphore.h>
+#include <errno.h>
+#include <assert.h>
+
+// huge default of a half a second
+#ifndef THPOOL_DEFAULT_TIMEOUT
+#define THPOOL_DEFAULT_TIMEOUT 500
+#endif
+
+struct _opaque_job_attr_t __default_future_attr = {
+    .return_needed = true,
+    .free_returned = NULL,
+    .unique_attr   = false
+};
+
+struct _opaque_job_attr_t __default_freeable_attr = {
+    .return_needed = true,
+    .free_returned = NULL,
+    .unique_attr   = false
+};
+
+struct _opaque_thpool_attr_t __default_thpool_attr = {
+    .timeout = THPOOL_DEFAULT_TIMEOUT
+};
+
 
 static void
 delete_list(struct job_list_node* node)
@@ -14,42 +46,174 @@ delete_list(struct job_list_node* node)
 
     delete_list(node->next);
     job_destroy(node->job);
-    free(node);
+    (void) free(node);
 }
 
 void 
 job_list_destroy(struct job_list* list)
 {
-    pthread_mutex_destroy(list->mutex);
-    pthread_cond_destroy(list->cv);
+    (void) pthread_mutex_destroy(&list->mutex);
+    (void) pthread_cond_destroy(&list->cv);
     delete_list(list->head);
 }
 
+/// Assumes that the mutex has already been aquired
+/// Does not try to aquire the mutex
+static void
+job_list_sem_post(struct job_list* list)
+{
+    // the deque was previously empty
+    if (!list->sem)
+        (void) pthread_cond_signal(&list->cv);
 
+    list->sem++;
+}
+
+static int
+job_list_sem_wait(struct job_list* list, unsigned milliseconds)
+{
+    if (!list->sem) {
+        struct timespec ts;
+        add_mili(&ts, milliseconds);
+        int err = pthread_cond_timedwait(&list->cv, &list->mutex, &ts);
+        if (err == -1) {
+            /// TODO: Error handling back for the entire project
+
+            return -1;
+        }
+
+        // if it is still 0, nothing was ever pushed
+        if (!list->sem)
+            return -1;
+    } 
+    
+    list->sem--;
+    return 0;
+}
 
 void 
 job_list_push(struct job_list* list, struct job* job)
 {
     struct job_list_node* new = malloc(sizeof(*new));
     new->job  = job;
-    new->next = 0;
+    new->next = NULL;
 
-    pthread_mutex_lock(&list->mutex);
+    (void) pthread_mutex_lock(&list->mutex);
 
     if (!list->back) {
         list->head = new;
         
-
-        sem_post(&list->sem);
+        job_list_sem_post(list);
     } else {
         list->back->next = new;
+        list->back = new;
     }
 
-    pthread_mutex_unlock(&list->mutex);
+    (void) pthread_mutex_unlock(&list->mutex);
 }
 
 struct job* 
-job_list_pop(struct job_list* list)
+job_list_pop(struct job_list* list, unsigned miliseconds)
 {
+    if ( job_list_sem_wait(list, miliseconds) == -1 )
+        return NULL;
     
+    (void) pthread_mutex_lock(&list->mutex);
+
+    struct job_list_node* node = list->head;
+    list->head = node->next;
+
+    (void) pthread_mutex_unlock(&list->mutex);
+
+    struct job* ret = node->job;
+
+    (void) free(node);
+
+    return ret;
+}
+
+
+void 
+job_init(struct job* job, void* (*start_routine) (void*), 
+    void* arg, job_attr_t attr)
+{
+    (void) pthread_mutex_init(&job->mutex, JOB_MUTEX_ATTR);
+
+    job->start_routine = start_routine;
+    job->arg = arg;
+
+    job->thread_id = NULL;
+
+    job->status = TPS_WAITING;
+
+    job->attr = attr;
+
+    (void) pthread_cond_init(&job->mutex, JOB_COND_ATTR);
+}
+
+void
+job_return(struct job* job, void* ret)
+{
+    if ( !job_is_future(job) ) {
+        job_destroy(job);
+        return;
+    }
+
+    job->status = TPS_RETURNED;
+    job->return_value = ret;
+
+    (void) pthread_cond_broadcast(&job->returned);
+}
+
+void 
+job_destroy(struct job* job)
+{
+    (void) pthread_mutex_destroy(&job->mutex);
+    (void) pthread_cond_destroy(&job->returned);
+
+    if (job->attr->free_returned)
+        job->attr->free_returned(job->return_value);
+    
+    (void) free(job);
+}
+
+void* worker(void*); 
+
+/// TODO handle errors
+/// TODO deal wtih pthread_attributes
+static struct thread_list* 
+thread_list_init(struct thread_pool* tp, unsigned num)
+{
+    assert(num);
+
+    struct thread_list* head = malloc(sizeof(*head));
+
+    struct thread_list* curr = head;
+    for (int i = 0; i < num; i++) {
+        curr = curr->next = malloc(sizeof(*head));
+        pthread_create(&curr->thread, NULL, &worker, tp);
+    }
+    
+    return curr->next = head;
+}
+
+unsigned get_ncpus();
+
+struct thread_pool* 
+thpool_init(unsigned num, thpool_attr_t attr)
+{
+    struct thread_pool* tp = malloc(sizeof(*tp));
+
+    if (!tp)
+        return NULL;
+
+    tp->attr = attr == NULL ? &__default_thpool_attr : attr;
+    
+    pthread_mutex_init(&tp->mutex, NULL);
+
+    tp->idle_threads = 0;
+    tp->max_threads = tp->num_threads = num == 0 ? get_ncpus() : num;
+    tp->threads = thread_list_init(tp, tp->num_threads);
+
+    return tp;
 }

@@ -1,7 +1,7 @@
 /**
  * @file thpool.h
  * @author Alex Brachet (abrahcet@purdue.edu)
- * @brief 
+ * @brief Public interface for the Thread Pool
  * @version 0.1
  * @date 2019-02-05
  * 
@@ -10,19 +10,31 @@
  */
 #pragma once
 
-#include <stdint.h>
+/// This is just used to show that attributes for example can be NULL
+#if __has_feature(nullablity)
+    #define _Nullable nullable
+#else
+    #define _Nullable
+#endif
 
-typedef int thpool_id_t;
+#include <stdint.h>
+#include <stdbool.h>
+
+typedef void* thpool_id_t;
 typedef void* thpool_future_t;
 
-typedef struct job_attr_t {
-    bool return_needed;     ///< If true, once the job returns the job should not be destroyed
-                            ///< true signifies that this is a future, and that the caller wants it to exist
-} job_attr_t;
+typedef struct _opaque_job_attr_t {
+    bool return_needed;             ///< If true, once the job returns the job should not be destroyed
+                                    ///< true signifies that this is a future, and that the caller wants it to exist
+    void (*free_returned)(void*);    ///< If not null, use this function to free the returned value
+                                    ///< No clean way to get this to work with munmap, unfortunately
+    bool unique_attr;               ///< If unique the struct gets free(3)'d  when a job ends
+} *job_attr_t;
 
-typedef struct thpool_attr_t {
+
+typedef struct _opaque_thpool_attr_t {
     uint32_t    timeout;        ///< How long the queue should wait for new jobs before removing excess threads
-} thpool_attr_t;
+} *thpool_attr_t;
 
 /// status of a job
 typedef enum {
@@ -45,10 +57,11 @@ typedef struct thread_pool thread_pool;
  * number of CPU's if it can be found, or will exit otherwise
  * 
  * @param num number of threads to create for the pool
+ * @param attr attributes. NULL will use normal attributes
  * 
  * @return thread_pool* the thread_pool
  */
-thread_pool* thpool_init(unsigned num);
+thread_pool* thpool_init(unsigned num, thpool_attr_t attr _Nullable);
 
 /**
  * @brief enqueues a job with the thread_pool
@@ -58,7 +71,7 @@ thread_pool* thpool_init(unsigned num);
  * @param arg argument to pass
  * 
  */
-void thpool_queue(thread_pool* thpool, void* (*start_routine)(void*), void* arg);
+thpool_id_t thpool_queue(thread_pool* thpool, void* (*start_routine)(void*), void* arg, job_attr_t attr _Nullable);
 
 
 /**
@@ -68,14 +81,16 @@ void thpool_queue(thread_pool* thpool, void* (*start_routine)(void*), void* arg)
  * @param thpool the thread_pool to queue a job with
  * @param start_routine function to call
  * @param arg argument to pass
+ * @param attr NULL will use basic job_attributes for a future. Passing attributes not suited for a future will set errno 
+ * 
  * @return thpool_id_t pointer to future
  */
-thpool_future_t thpool_async(thread_pool* thpool, void* (*start_routine)(void*), void* arg);
+thpool_future_t thpool_async(thread_pool* thpool, void* (*start_routine)(void*), void* arg, job_attr_t attr _Nullable);
 
 /**
- * @brief blocking wait on all jobs
+ * @brief passive blocking wait on all jobs to finish and for the queue to be empty
  * 
- * @param pool the thread_pool to wait for all processes to complete
+ * @param pool the thread_pool to wait on
  */
 void thpool_wait(thread_pool* pool);
 
@@ -97,14 +112,15 @@ void thpool_destroy(thread_pool* pool);
 void thpool_destroy_now(thread_pool* pool);
 
 /**
- * @brief blocking wait call on a specific job
+ * @brief blocking wait call on a specific job. If another tread is already waiting on this
+ * job then errno will be set to EBUSY and -1 will be returned. 
  * 
  * @param pool the thread_pool which the job belongs to
- * @param id id of the job from that pool
+ * @param future the job to wait on
  * 
  * @return void* value returned by the job
  */
-void* thpool_await(thread_pool* pool, thpool_id_t id);
+void* thpool_await(thread_pool* pool, thpool_future_t future);
 
 
 /**
@@ -117,7 +133,7 @@ void* thpool_await(thread_pool* pool, thpool_id_t id);
  * @param new_num number of threads the pool should have
  * @return int new number of threads of the pool, -1 on error
  */
-int change_num_threads(thread_pool* pool, int new_num);
+int change_num_threads(thread_pool* restrict pool, int new_num);
 
 /**
  * @brief gives the status of a worker thread. Returns tp_job_status_t::TPS_NOEXIST and sets errno
@@ -135,6 +151,7 @@ tp_job_status_t thp_thread_status(thread_pool* pool, thpool_id_t id);
  * 
  * @param pool pool where the worker resides
  * @param id id of the thread to send SIGSTOP
+ * 
  * @return tp_job_status_t previous status of the thread
  */
 tp_job_status_t thp_thread_stop(thread_pool* pool, thpool_id_t id);
