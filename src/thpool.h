@@ -19,6 +19,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdatomic.h>
 
 typedef void* thpool_id_t;
 typedef void* thpool_future_t;
@@ -49,7 +50,7 @@ typedef enum {
 } tp_job_status_t;
 
 struct thread_pool;
-typedef struct thread_pool thread_pool;
+typedef struct thread_pool* thread_pool_t;
 
 /**
  * @brief creates a thread_pool with a specified amount of threads
@@ -61,7 +62,7 @@ typedef struct thread_pool thread_pool;
  * 
  * @return thread_pool* the thread_pool
  */
-thread_pool* thpool_init(unsigned num, thpool_attr_t attr _Nullable);
+thread_pool_t thpool_init(atomic_uint num, thpool_attr_t attr _Nullable);
 
 /**
  * @brief enqueues a job with the thread_pool
@@ -71,7 +72,7 @@ thread_pool* thpool_init(unsigned num, thpool_attr_t attr _Nullable);
  * @param arg argument to pass
  * 
  */
-thpool_id_t thpool_queue(thread_pool* thpool, void* (*start_routine)(void*), void* arg, job_attr_t attr _Nullable);
+thpool_id_t thpool_queue(thread_pool_t thpool, void* (*start_routine)(void*), void* arg, job_attr_t attr _Nullable);
 
 
 /**
@@ -85,14 +86,14 @@ thpool_id_t thpool_queue(thread_pool* thpool, void* (*start_routine)(void*), voi
  * 
  * @return thpool_id_t pointer to future
  */
-thpool_future_t thpool_async(thread_pool* thpool, void* (*start_routine)(void*), void* arg, job_attr_t attr _Nullable);
+thpool_future_t thpool_async(thread_pool_t thpool, void* (*start_routine)(void*), void* arg, job_attr_t attr _Nullable);
 
 /**
  * @brief passive blocking wait on all jobs to finish and for the queue to be empty
  * 
  * @param pool the thread_pool to wait on
  */
-void thpool_wait(thread_pool* pool);
+void thpool_wait(thread_pool_t pool);
 
 /**
  * @brief blocking call waiting for all workers to exit, 
@@ -101,7 +102,7 @@ void thpool_wait(thread_pool* pool);
  * 
  * @param pool the thread_pool to destroy
  */
-void thpool_destroy(thread_pool* pool);
+void thpool_destroy(thread_pool_t pool);
 
 /**
  * @brief cleans up the thread_pools resources immediately, all currently
@@ -109,7 +110,7 @@ void thpool_destroy(thread_pool* pool);
  * 
  * @param pool thread_pool to destroy
  */
-void thpool_destroy_now(thread_pool* pool);
+void thpool_destroy_now(thread_pool_t pool);
 
 /**
  * @brief blocking wait call on a specific job. If another tread is already waiting on this
@@ -120,7 +121,7 @@ void thpool_destroy_now(thread_pool* pool);
  * 
  * @return void* value returned by the job
  */
-void* thpool_await(thread_pool* pool, thpool_future_t future);
+void* thpool_await(thread_pool_t pool, thpool_future_t future);
 
 
 /**
@@ -133,7 +134,7 @@ void* thpool_await(thread_pool* pool, thpool_future_t future);
  * @param new_num number of threads the pool should have
  * @return int new number of threads of the pool, -1 on error
  */
-int change_num_threads(thread_pool* restrict pool, int new_num);
+int change_num_threads(thread_pool_t restrict pool, int new_num);
 
 /**
  * @brief gives the status of a worker thread. Returns tp_job_status_t::TPS_NOEXIST and sets errno
@@ -144,7 +145,7 @@ int change_num_threads(thread_pool* restrict pool, int new_num);
  * 
  * @return tp_job_status_t status enum of the job
  */
-tp_job_status_t thp_thread_status(thread_pool* pool, thpool_id_t id);
+tp_job_status_t thp_thread_status(thread_pool_t pool, thpool_id_t id);
 
 /**
  * @brief 
@@ -154,4 +155,6 @@ tp_job_status_t thp_thread_status(thread_pool* pool, thpool_id_t id);
  * 
  * @return tp_job_status_t previous status of the thread
  */
-tp_job_status_t thp_thread_stop(thread_pool* pool, thpool_id_t id);
+tp_job_status_t thp_thread_stop(thread_pool_t pool, thpool_id_t id);
+
+void print_debug_msg(thpool_future_t);

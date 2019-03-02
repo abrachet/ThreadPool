@@ -21,6 +21,7 @@ extern struct _opaque_thpool_attr_t __default_thpool_attr;
  * threadpool
  */
 struct job {
+    const char*         debug_msg;      // delete later
     pthread_mutex_t     mutex;          ///< protects entire job
 
     void* (*start_routine) (void*);     ///< Start routine of the job
@@ -75,7 +76,7 @@ struct thread_list {
  * 
  * @return struct thread_list* head of the list
  */
-struct thread_list* thread_list_init(struct thread_pool* tp, unsigned num);
+//struct thread_list* thread_list_init(struct thread_pool* tp, unsigned num);
 
 /**
  * @brief
@@ -149,15 +150,12 @@ void job_destroy(struct job* job);
 ///////////////////////////////////////////////
 
 /**
- * @brief Creates the job_list
+ * @brief Initializes a job_list struct
  * 
- * @param list pointer to the list who's values should be initialized
+ * @param list 
+ * @return int 
  */
-#define job_list_init(list)             \
-do {                                    \
-    sem_init(&(list)->sem, true, false);\
-    (list)->head = NULL;                \
-} while(0)
+int job_list_init(struct job_list* list);
 
 
 /**
@@ -195,3 +193,12 @@ struct job* job_list_pop(struct job_list* list, unsigned miliseconds);
  * @param mili number of miliseconds from the current system time
  */
 void add_mili(struct timespec* add, unsigned mili);
+
+/**
+ * @brief used internally by the worker function after a job has finished 
+ * to determine if it should exit
+ * 
+ * @param pool
+ * @return if threads should start exiting when finished with their jobs
+ */
+bool thpool_removing_threads(struct thread_pool* pool);
