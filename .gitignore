@@ -13,3 +13,5 @@ testing/
 *.dSYM
 
 test.c
+src/main.c
+src/test
