@@ -3,6 +3,7 @@
 //#include "tp_thread.h"
 
 #include <setjmp.h>
+#include <stdio.h>
 #include <signal.h>
 
 // just a random number to know that the thread exited normall
@@ -11,7 +12,13 @@
 static struct job* 
 get_job(struct thread_pool* th)
 {
-    return NULL;
+    struct job* job = job_list_pop(&th->job_list, 1000);
+    if (!job)
+        return NULL;
+    
+        
+    printf("job->SR = %p\n", (void*)job->start_routine);
+    return job;
 }
 
 static void
@@ -21,6 +28,7 @@ cleanup_routine(void* arg)
 
     // notify thread_pool to create another thread_pool if
     // the queue is larger than the number of threads
+    thpool->num_threads--;
 }
 
 
@@ -37,18 +45,23 @@ worker(void* arg)
 {
     struct thread_pool* thpool = (struct thread_pool*) arg;
 
+    puts("Worker thread started");
+
     thpool->num_threads++;
 
-    pthread_cleanup_push(&cleanup_routine, thpool);
+    //pthread_cleanup_push(&cleanup_routine, thpool);
 
-    (void) setjmp(thlocal_jmp);
-    signal(SIGUSR1, &thpool_kill_handler);
+    //(void) setjmp(thlocal_jmp);
+    //signal(SIGUSR1, &thpool_kill_handler);
 
     for (;;) {
-        if (thpool_removing_threads(thpool))
-            break;
+        //if (thpool_removing_threads(thpool))
+        //    break;
            
         struct job* current_job = get_job(thpool);
+
+        if (!current_job)
+            return (void*)-1;
 
         (void) pthread_mutex_lock(&current_job->mutex);
         current_job->return_value = current_job->start_routine(current_job->arg);
@@ -57,7 +70,8 @@ worker(void* arg)
         (void) pthread_mutex_unlock(&current_job->mutex);
     }
 
-    pthread_cleanup_pop(true);
+    //pthread_cleanup_pop(true);
 
-    return NORMAL_EXIT;
+    //return NORMAL_EXIT;
+    return NULL;
 }
