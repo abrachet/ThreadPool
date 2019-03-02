@@ -10,8 +10,10 @@
 #include "thpool.h"
 
 #include <stdbool.h>
+#include <stdlib.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdatomic.h>
 
 #include <errno.h>
 #include <assert.h>
@@ -47,6 +49,18 @@ delete_list(struct job_list_node* node)
     delete_list(node->next);
     job_destroy(node->job);
     (void) free(node);
+}
+
+int 
+job_list_init(struct job_list* list)
+{
+    list->back = list->head = NULL;
+    list->sem = 0;
+
+    (void) pthread_cond_init(&list->cv, NULL);
+    (void) pthread_mutex_init(&list->mutex, NULL);
+
+    return 0;
 }
 
 void 
@@ -100,10 +114,10 @@ job_list_push(struct job_list* list, struct job* job)
 
     (void) pthread_mutex_lock(&list->mutex);
 
+    job_list_sem_post(list);
+
     if (!list->back) {
-        list->head = new;
-        
-        job_list_sem_post(list);
+        list->back = list->head = new;
     } else {
         list->back->next = new;
         list->back = new;
@@ -118,10 +132,17 @@ job_list_pop(struct job_list* list, unsigned miliseconds)
     if ( job_list_sem_wait(list, miliseconds) == -1 )
         return NULL;
     
+    
+
     (void) pthread_mutex_lock(&list->mutex);
 
     struct job_list_node* node = list->head;
+    
+    if (list->head == list->back)
+        list->back = NULL;
+    
     list->head = node->next;
+
 
     (void) pthread_mutex_unlock(&list->mutex);
 
@@ -138,6 +159,9 @@ job_init(struct job* job, void* (*start_routine) (void*),
     void* arg, job_attr_t attr)
 {
     (void) pthread_mutex_init(&job->mutex, JOB_MUTEX_ATTR);
+    (void) pthread_mutex_init(&job->ret_mutex, NULL);
+
+    job->debug_msg = "init happened";
 
     job->start_routine = start_routine;
     job->arg = arg;
@@ -148,7 +172,13 @@ job_init(struct job* job, void* (*start_routine) (void*),
 
     job->attr = attr;
 
-    (void) pthread_cond_init(&job->mutex, JOB_COND_ATTR);
+    (void) pthread_cond_init(&job->returned, JOB_COND_ATTR);
+}
+
+void print_debug_msg(thpool_future_t future)
+{
+    struct job* job = future;
+    puts(job->debug_msg);
 }
 
 void
@@ -177,6 +207,12 @@ job_destroy(struct job* job)
     (void) free(job);
 }
 
+void 
+add_mili(struct timespec* add, unsigned mili)
+{
+    add->tv_nsec += mili * 1000000;
+}
+
 void* worker(void*); 
 
 /// TODO handle errors
@@ -197,10 +233,11 @@ thread_list_init(struct thread_pool* tp, unsigned num)
     return curr->next = head;
 }
 
-unsigned get_ncpus();
+#define get_ncpus() 2
+
 
 struct thread_pool* 
-thpool_init(unsigned num, thpool_attr_t attr)
+thpool_init(atomic_uint num, thpool_attr_t attr)
 {
     struct thread_pool* tp = malloc(sizeof(*tp));
 
@@ -212,8 +249,20 @@ thpool_init(unsigned num, thpool_attr_t attr)
     pthread_mutex_init(&tp->mutex, NULL);
 
     tp->idle_threads = 0;
-    tp->max_threads = tp->num_threads = num == 0 ? get_ncpus() : num;
+    tp->num_threads =  num == 0 ? get_ncpus() : num;
+    tp->max_threads = tp->num_threads;
     tp->threads = thread_list_init(tp, tp->num_threads);
 
+    job_list_init(&tp->job_list);
+
     return tp;
+}
+
+bool 
+thpool_removing_threads(struct thread_pool* pool)
+{
+    if (pool->num_threads > pool->max_threads)
+        return true;
+    
+    return (!pool->job_list.sem);
 }
