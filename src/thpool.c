@@ -28,6 +28,8 @@ thpool_do_queue(thread_pool* _Nonnull thpool, void* (* _Nonnull start_routine)(v
 
     job_list_push(&thpool->job_list, job);
 
+    print_debug_msg(job);
+
     return job;
 }
 
@@ -58,7 +60,7 @@ thpool_async(thread_pool* thpool, void* (*start_routine)(void*),
     if (!attr)
         attr = &__default_future_attr;
 
-    return thpool_do_queue(thpool, start_routine, arg, attr);
+    return (void*) thpool_do_queue(thpool, start_routine, arg, attr);
 }
 
 
@@ -73,10 +75,12 @@ thpool_await(thread_pool* pool, thpool_future_t future)
 {
     struct job* job = (struct job*) future;
 
-    if ( pthread_mutex_trylock(&job->ret_mutex) ) {
+    int error;
+    if (  (error = pthread_mutex_trylock(&job->ret_mutex)) ) {
         // TODO change this later to actually check errno, 
         // for now it should always be because of EBUSY
         assert(errno == EBUSY);
+        
         return (void*) -1;
     } 
 
@@ -84,7 +88,7 @@ thpool_await(thread_pool* pool, thpool_future_t future)
         pthread_cond_wait(&job->returned, &job->ret_mutex);
 
     // it should have called job_return which should have set this
-    assert(job->status == TPS_RETURNED);
+    //assert(job->status == TPS_RETURNED);
 
     return job->return_value;
 }
