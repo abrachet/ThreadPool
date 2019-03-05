@@ -17,6 +17,12 @@
     #define _Nullable
 #endif
 
+
+#if __STDC_VERSION__ < 201112L
+    #define _Noreturn 
+#endif
+
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdatomic.h>
@@ -157,4 +163,41 @@ tp_job_status_t thp_thread_status(thread_pool_t pool, thpool_id_t id);
  */
 tp_job_status_t thp_thread_stop(thread_pool_t pool, thpool_id_t id);
 
-void print_debug_msg(thpool_future_t);
+/**
+ * @brief Register a function to be called on exit of a job.
+ * Similar to on_exit(3). Different is the first parameter of the
+ * registered function which is void * instead of int, as jobs return 
+ * void *
+ * 
+ * @param function function to be called on exit
+ * @param arg argument to pass to function
+ * 
+ * @return returns 0 on success
+ */
+int thjob_on_exit(void (*function)(void *, void *), void * arg);
+
+/**
+ * @brief registers a function to be called on job termination.
+ * uses the same stack as /thjob_on_exit. functions are called in reverse order
+ * of their registration
+ * 
+ * @param function function to be called on exit
+ * @return int 0 on success
+ */
+int thjob_atexit(void (*function)(void));
+
+/**
+ * @brief get calling jobs future
+ * 
+ * @return thpool_future_t 
+ */
+thpool_future_t thjob_self();
+
+/**
+ * @brief exits the current job, should only be called from a function
+ * that would be run as a job by the thread pool. Otherwise the behavior is 
+ * undefined
+ * 
+ * @return cannot return
+ */
+_Noreturn void thjob_exit();

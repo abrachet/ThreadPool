@@ -7,9 +7,13 @@
 #include <stdatomic.h> // _Atomic typedef types
 
 #include <stdbool.h>
+#include <errno.h> // Error code macros
 
 #include "thpool.h"
 
+// number unlikely to be returned by jobs
+// signifies that the thread exited normally, ie not by thread_kill
+// or pthread_exit
 #define NORMAL_EXIT ((void*)748)
 
 extern struct _opaque_job_attr_t    __default_future_attr;
@@ -31,6 +35,8 @@ struct job {
     tp_job_status_t     status;         ///< Jobs current status
 
     job_attr_t          attr;           ///< Attributes
+
+    struct exit_stack*  on_exit;        ///< Functions called on exit
 
     pthread_mutex_t     ret_mutex;      ///< Mutex used with the cond variable. 
                                         ///< This doesn't protect the entire mutex,
@@ -98,6 +104,8 @@ typedef struct thread_pool {
     struct job_list         job_list;       ///< Queue of jobs
 } thread_pool;
 
+
+
 ///////////////////////////////////////////////
 ///////////////////////////////////////////////
 ///////////// struct job routines /////////////
@@ -142,6 +150,28 @@ void job_return(struct job* job, void* ret);
  * @param job job to destroy
  */
 void job_destroy(struct job* job);
+
+
+struct exit_stack {
+    union {
+        void (*on_exit)(void *, void *);
+        void (*at_exit)(void);
+    };
+
+    // we don't care which function it actually is
+    // in either case we call on_exit and put in 
+    // the values in their respective registers, 
+    // atexit functions just have no way to get to them anyway
+
+    void* arg;
+
+    struct exit_stack* next;
+};
+
+
+int job_register_on_exit(struct job* job, 
+        void (*function)(void *, void *), void * arg);
+
 
 ///////////////////////////////////////////////
 ///////////////////////////////////////////////

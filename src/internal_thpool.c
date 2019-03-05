@@ -73,7 +73,7 @@ job_list_destroy(struct job_list* list)
 
 /// Assumes that the mutex has already been aquired
 /// Does not try to aquire the mutex
-static void
+static inline void
 job_list_sem_post(struct job_list* list)
 {
     // the deque was previously empty
@@ -175,15 +175,20 @@ job_init(struct job* job, void* (*start_routine) (void*),
     (void) pthread_cond_init(&job->returned, JOB_COND_ATTR);
 }
 
-void print_debug_msg(thpool_future_t future)
+
+static inline void 
+call_exit_funcs(struct job* job, void* ret)
 {
-    struct job* job = future;
-    puts(job->debug_msg);
+    for (struct exit_stack* node = job->on_exit; node; node = node->next)
+        node->on_exit(ret, node->arg);
+
 }
 
 void
 job_return(struct job* job, void* ret)
 {
+    call_exit_funcs(job, ret);
+
     if ( !job_is_future(job) ) {
         job_destroy(job);
         return;
@@ -266,3 +271,21 @@ thpool_removing_threads(struct thread_pool* pool)
     
     return (!pool->job_list.sem);
 }
+
+int 
+job_register_on_exit(struct job* job, 
+        void (*function)(void *, void *), void * arg)
+{
+    struct exit_stack* new = malloc(sizeof(struct exit_stack));
+    if (!new)
+        return ENOMEM;
+
+    new->arg = arg;
+    new->on_exit = function;
+    new->next = job->on_exit;
+    job->on_exit = new;
+
+    return 0;
+}
+
+
