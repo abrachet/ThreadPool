@@ -153,6 +153,21 @@ job_list_pop(struct job_list* list, unsigned miliseconds)
     return ret;
 }
 
+struct job* 
+job_list_pull(struct job_list* list, struct job* job)
+{
+    struct job_list_node* curr = list->head;
+    for (; curr && curr->next->job != job; curr = curr->next);
+
+    if (!curr)
+        return NULL;
+
+    curr->next = curr->next->next;
+
+    return job;
+}
+
+
 
 void 
 job_init(struct job* job, void* (*start_routine) (void*), 

@@ -214,6 +214,16 @@ void job_list_push(struct job_list* list, struct job* job);
  */
 struct job* job_list_pop(struct job_list* list, unsigned miliseconds);
 
+/**
+ * @brief Pull a specific job from the list
+ * 
+ * @param list list to pull from
+ * @param job job to search for
+ * 
+ * @return struct job* returns job on success, NULL on failure
+ */
+struct job* job_list_pull(struct job_list* list, struct job* job);
+
 
 /// probably should just make this a macro
 /**

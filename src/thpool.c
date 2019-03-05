@@ -70,6 +70,20 @@ thp_thread_status(thread_pool* pool, thpool_id_t id)
     return ((struct job*)id)->status;
 }
 
+static void*
+sync_run(thread_pool* pool, struct job* job)
+{
+    if (!job_list_pull(&pool->job_list, job))
+        return (void*)-1;
+
+
+    void* ret = job->start_routine(job->arg);
+
+    job_return(job, ret);
+
+    return ret;
+}
+
 void* 
 thpool_await(thread_pool* pool, thpool_future_t future)
 {
@@ -84,8 +98,11 @@ thpool_await(thread_pool* pool, thpool_future_t future)
         return (void*) -1;
     } 
 
+    if (job->status == TPS_WAITING)
+        return sync_run(pool, job);
+
     if (job->status != TPS_RETURNED)
-        pthread_cond_wait(&job->returned, &job->ret_mutex);
+        (void) pthread_cond_wait(&job->returned, &job->ret_mutex);
 
     // it should have called job_return which should have set this
     //assert(job->status == TPS_RETURNED);
