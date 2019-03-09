@@ -53,16 +53,6 @@ thjob_self()
     return current_job;
 }
 
-void 
-thjob_exit()
-{
-    (void) raise(SIGUSR1);
-
-    // spinlock until next context switch
-    // I don't know a better way to do this yet
-    for (;;);
-}
-
 void*
 worker(void* arg) 
 {

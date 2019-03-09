@@ -15,6 +15,8 @@
 
 #include <signal.h>
 
+#include <sched.h>
+
 #include <assert.h>
 #include <errno.h>
 
@@ -124,4 +126,12 @@ thp_thread_stop(thread_pool* pool, thpool_id_t id)
     assert(job->status == TPS_KILLED);
 
     return status;
+}
+
+void 
+thjob_exit()
+{
+    (void) raise(SIGUSR1);
+
+    (void) sched_yield();
 }
