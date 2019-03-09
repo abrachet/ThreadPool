@@ -253,11 +253,12 @@ thread_list_init(struct thread_pool* tp, unsigned num)
     return curr->next = head;
 }
 
+// todo
 #define get_ncpus() 2
 
 
 struct thread_pool* 
-thpool_init(atomic_uint num, thpool_attr_t attr)
+thpool_init(int num, thpool_attr_t attr)
 {
     struct thread_pool* tp = malloc(sizeof(*tp));
 
