@@ -258,7 +258,7 @@ thread_list_init(struct thread_pool* tp, unsigned num)
 
 
 struct thread_pool* 
-thpool_init(int num, thpool_attr_t attr)
+thpool_init(unsigned num, thpool_attr_t attr)
 {
     struct thread_pool* tp = malloc(sizeof(*tp));
 
