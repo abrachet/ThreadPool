@@ -15,11 +15,10 @@ get_job(struct thread_pool* th)
     if (!job)
         return NULL;
     
-        
-    printf("job->SR = %p\n", (void*)job->start_routine);
     return job;
 }
 
+#if 0
 static void
 cleanup_routine(void* arg)
 {
@@ -29,7 +28,7 @@ cleanup_routine(void* arg)
     // the queue is larger than the number of threads
     thpool->num_threads--;
 }
-
+#endif
 
 static void 
 thpool_kill_handler(int sig)
@@ -58,8 +57,6 @@ worker(void* arg)
 {
     struct thread_pool* thpool = (struct thread_pool*) arg;
 
-    puts("Worker thread started");
-
     thpool->num_threads++;
 
     //pthread_cleanup_push(&cleanup_routine, thpool);
@@ -68,7 +65,7 @@ worker(void* arg)
     signal(SIGUSR1, &thpool_kill_handler);
 
     for (;;) {
-        
+
         // thpool_removing_threads not ready yet
         #if 0
         if (thpool_removing_threads(thpool))
@@ -93,6 +90,5 @@ worker(void* arg)
 
     //pthread_cleanup_pop(true);
 
-    //return NORMAL_EXIT;
     return NULL;
 }

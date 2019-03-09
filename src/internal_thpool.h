@@ -196,12 +196,20 @@ int job_list_init(struct job_list* list);
 void job_list_destroy(struct job_list* list);
 
 /**
- * @brief pushes a job to the list
+ * @brief pushes a job to the back of the list
  * 
  * @param list 
  * @param job 
  */
 void job_list_push(struct job_list* list, struct job* job);
+
+/**
+ * @brief pushes to the front
+ * 
+ * @param list 
+ * @param job 
+ */
+void job_list_push_front(struct job_list* list, struct job* job);
 
 /**
  * @brief returns the next job in the queue, or NULL if the request has timed out.
@@ -241,3 +249,12 @@ void add_mili(struct timespec* add, unsigned mili);
  * @return if threads should start exiting when finished with their jobs
  */
 bool thpool_removing_threads(struct thread_pool* pool);
+
+/**
+ * @brief 
+ * 
+ * @param tp 
+ * @param num 
+ * @return struct thread_list* 
+ */
+struct thread_list* thread_list_init(struct thread_pool* tp, unsigned num);

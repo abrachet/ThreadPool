@@ -126,15 +126,29 @@ job_list_push(struct job_list* list, struct job* job)
     (void) pthread_mutex_unlock(&list->mutex);
 }
 
+void
+job_list_push_front(struct job_list* list, struct job* job)
+{
+    struct job_list_node* new = malloc(sizeof(*new));
+    new->job  = job;
+
+    (void) pthread_mutex_lock(&list->mutex);
+
+    job_list_sem_post(list);
+
+    new->next = list->head;
+    list->head = new;
+
+    (void) pthread_mutex_unlock(&list->mutex);
+}
+
 struct job* 
 job_list_pop(struct job_list* list, unsigned miliseconds)
 {
+    (void) pthread_mutex_lock(&list->mutex);
+
     if ( job_list_sem_wait(list, miliseconds) == -1 )
         return NULL;
-    
-    
-
-    (void) pthread_mutex_lock(&list->mutex);
 
     struct job_list_node* node = list->head;
     
@@ -142,7 +156,6 @@ job_list_pop(struct job_list* list, unsigned miliseconds)
         list->back = NULL;
     
     list->head = node->next;
-
 
     (void) pthread_mutex_unlock(&list->mutex);
 
@@ -156,13 +169,22 @@ job_list_pop(struct job_list* list, unsigned miliseconds)
 struct job* 
 job_list_pull(struct job_list* list, struct job* job)
 {
-    struct job_list_node* curr = list->head;
-    for (; curr && curr->next->job != job; curr = curr->next);
+    (void) pthread_mutex_lock(&list->mutex);
 
-    if (!curr)
+    if ( job_list_sem_wait(list, 1000) == -1 )
+        return NULL;
+    
+    struct job_list_node* curr = list->head;
+    for (; curr && curr->next && curr->next->job != job; curr = curr->next);
+
+    if (!curr || curr->job != job)
         return NULL;
 
     curr->next = curr->next->next;
+
+    free(curr);
+
+    (void) pthread_mutex_unlock(&list->mutex);
 
     return job;
 }
@@ -235,7 +257,7 @@ void* worker(void*);
 
 /// TODO handle errors
 /// TODO deal wtih pthread_attributes
-static struct thread_list* 
+struct thread_list* 
 thread_list_init(struct thread_pool* tp, unsigned num)
 {
     assert(num);
@@ -254,28 +276,6 @@ thread_list_init(struct thread_pool* tp, unsigned num)
 // todo
 #define get_ncpus() 2
 
-
-struct thread_pool* 
-thpool_init(unsigned num, thpool_attr_t attr)
-{
-    struct thread_pool* tp = malloc(sizeof(*tp));
-
-    if (!tp)
-        return NULL;
-
-    tp->attr = attr == NULL ? &__default_thpool_attr : attr;
-    
-    pthread_mutex_init(&tp->mutex, NULL);
-
-    tp->idle_threads = 0;
-    tp->num_threads =  num == 0 ? get_ncpus() : num;
-    tp->max_threads = tp->num_threads;
-    tp->threads = thread_list_init(tp, tp->num_threads);
-
-    job_list_init(&tp->job_list);
-
-    return tp;
-}
 
 bool 
 thpool_removing_threads(struct thread_pool* pool)

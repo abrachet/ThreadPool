@@ -20,6 +20,38 @@
 #include <assert.h>
 #include <errno.h>
 
+static struct job * current_job;
+
+static void null_func(int _) {}
+
+#define get_ncpus() 2
+
+struct thread_pool* 
+thpool_init(unsigned num, thpool_attr_t attr)
+{
+    struct thread_pool* tp = malloc(sizeof(*tp));
+
+    // If SIGUSR1 is signalled in the main thread of execution, ignore it. 
+    // This is complicated, I need to fix how the entire thing works but I am doing this for now
+    signal(SIGUSR1, &null_func);
+
+    if (!tp)
+        return NULL;
+
+    tp->attr = attr == NULL ? &__default_thpool_attr : attr;
+    
+    pthread_mutex_init(&tp->mutex, NULL);
+
+    tp->idle_threads = 0;
+    tp->num_threads =  num == 0 ? get_ncpus() : num;
+    tp->max_threads = tp->num_threads;
+    tp->threads = thread_list_init(tp, tp->num_threads);
+
+    job_list_init(&tp->job_list);
+
+    return tp;
+}
+
 static struct job*
 thpool_do_queue(thread_pool* _Nonnull thpool, void* (* _Nonnull start_routine)(void*), 
         void* arg, job_attr_t attr _Nullable)
@@ -72,9 +104,14 @@ thp_thread_status(thread_pool* pool, thpool_id_t id)
 static void*
 sync_run(thread_pool* pool, struct job* job)
 {
-    if (!job_list_pull(&pool->job_list, job))
-        return (void*)-1;
+    job->status = TPS_RUNNING;
 
+    if ( job_list_pull(&pool->job_list, job) != job) {
+        errno = EINVAL;
+        return NULL;
+    }
+
+    current_job = job;
 
     void* ret = job->start_routine(job->arg);
 
@@ -95,16 +132,22 @@ thpool_await(thread_pool* pool, thpool_future_t future)
         assert(errno == EBUSY);
         
         return (void*) -1;
-    } 
+    }
 
-    if (job->status == TPS_WAITING)
-        return sync_run(pool, job);
+    if (job->status == TPS_WAITING) {
+        if ( job_list_pull(&pool->job_list, job) != job) {
+            errno = EINVAL;
+            puts("got here");
+            return (void*)-1;
+        }
 
-    if (job->status != TPS_RETURNED)
+        job_list_push_front(&pool->job_list, job);
+    }
+        
+    if (job->status != TPS_RETURNED || job->status != TPS_KILLED)
         (void) pthread_cond_wait(&job->returned, &job->ret_mutex);
 
-    // it should have called job_return which should have set this
-    //assert(job->status == TPS_RETURNED);
+    pthread_mutex_unlock(&job->ret_mutex);
 
     return job->return_value;
 }
@@ -133,5 +176,6 @@ thjob_exit()
 
     (void) sched_yield();
 
-    assert(! "Should never get here");
+    // actually it can get here 
+    // assert(! "Should never get here");
 }

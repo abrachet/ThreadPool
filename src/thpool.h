@@ -140,7 +140,7 @@ void* thpool_await(thread_pool_t pool, thpool_future_t future);
  * @param new_num number of threads the pool should have
  * @return int new number of threads of the pool, -1 on error
  */
-int change_num_threads(thread_pool_t restrict pool, int new_num);
+int change_num_threads(thread_pool_t  pool, int new_num);
 
 /**
  * @brief gives the status of a worker thread. Returns tp_job_status_t::TPS_NOEXIST and sets errno
