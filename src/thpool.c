@@ -132,4 +132,6 @@ thjob_exit()
     (void) raise(SIGUSR1);
 
     (void) sched_yield();
+
+    assert(! "Should never get here");
 }
