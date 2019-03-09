@@ -1,3 +1,3 @@
-Thread pool implementation in C
+### Thread pool implementation in C
 
-Still a lot to do. The base functionality works, but I would like to add more.
+Uses low level C features like atomics and thread_local as well as low level routines like longjmp and takes use of signals. Use of these, particularly signals make this thread pool able to give users large control with low overhead for that control. Killing a job for example can be done without killing the thread it is running on. Making this thread pool versitile and powerful. Ultimately there are less features than I would like, but it is built on a solid base that adding feautres is not difficult. 
