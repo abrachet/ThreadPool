@@ -1,6 +1,6 @@
 /**
  * @file thpool.c
- * @author your name (you@domain.com)
+ * @author Alex Brachet-Mialot (abrachet@purdue.edu)
  * @brief Implementations of the public facing routines for the thread pool
  * @version 0.1
  * @date 2019-02-12
@@ -62,7 +62,6 @@ thpool_async(thread_pool* thpool, void* (*start_routine)(void*),
 
     return (void*) thpool_do_queue(thpool, start_routine, arg, attr);
 }
-
 
 tp_job_status_t 
 thp_thread_status(thread_pool* pool, thpool_id_t id)

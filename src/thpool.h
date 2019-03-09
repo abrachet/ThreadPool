@@ -1,6 +1,6 @@
 /**
  * @file thpool.h
- * @author Alex Brachet (abrahcet@purdue.edu)
+ * @author Alex Brachet (abrachet@purdue.edu)
  * @brief Public interface for the Thread Pool
  * @version 0.1
  * @date 2019-02-05
@@ -68,7 +68,7 @@ typedef struct thread_pool* thread_pool_t;
  * 
  * @return thread_pool* the thread_pool
  */
-thread_pool_t thpool_init(atomic_uint num, thpool_attr_t attr _Nullable);
+thread_pool_t thpool_init(unsigned num, thpool_attr_t attr _Nullable);
 
 /**
  * @brief enqueues a job with the thread_pool
