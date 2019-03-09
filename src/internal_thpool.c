@@ -176,8 +176,6 @@ job_init(struct job* job, void* (*start_routine) (void*),
     (void) pthread_mutex_init(&job->mutex, JOB_MUTEX_ATTR);
     (void) pthread_mutex_init(&job->ret_mutex, NULL);
 
-    job->debug_msg = "init happened";
-
     job->start_routine = start_routine;
     job->arg = arg;
 

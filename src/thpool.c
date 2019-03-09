@@ -30,8 +30,6 @@ thpool_do_queue(thread_pool* _Nonnull thpool, void* (* _Nonnull start_routine)(v
 
     job_list_push(&thpool->job_list, job);
 
-    print_debug_msg(job);
-
     return job;
 }
 
@@ -118,7 +116,7 @@ thp_thread_stop(thread_pool* pool, thpool_id_t id)
 
     tp_job_status_t status = job->status;
 
-    pthread_kill(job->thread_id, SIGUSR1);
+    (void) pthread_kill(job->thread_id, SIGUSR1);
     
     // its status gets changed by the SIGUSR1 signal handler
     // so we don't need to change it back here

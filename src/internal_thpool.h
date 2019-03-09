@@ -25,7 +25,6 @@ extern struct _opaque_thpool_attr_t __default_thpool_attr;
  * threadpool
  */
 struct job {
-    const char*         debug_msg;      // delete later
     pthread_mutex_t     mutex;          ///< protects entire job
 
     void* (*start_routine) (void*);     ///< Start routine of the job
