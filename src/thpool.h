@@ -129,7 +129,6 @@ void thpool_destroy_now(thread_pool_t pool);
  */
 void* thpool_await(thread_pool_t pool, thpool_future_t future);
 
-
 /**
  * @brief changes the number of threads of the thread pool
  * can be given fewer threads than previously to remove threads
@@ -140,7 +139,7 @@ void* thpool_await(thread_pool_t pool, thpool_future_t future);
  * @param new_num number of threads the pool should have
  * @return int new number of threads of the pool, -1 on error
  */
-int change_num_threads(thread_pool_t  pool, int new_num);
+int change_num_threads(thread_pool_t pool, int new_num);
 
 /**
  * @brief gives the status of a worker thread. Returns tp_job_status_t::TPS_NOEXIST and sets errno
@@ -151,17 +150,44 @@ int change_num_threads(thread_pool_t  pool, int new_num);
  * 
  * @return tp_job_status_t status enum of the job
  */
-tp_job_status_t thp_thread_status(thread_pool_t pool, thpool_id_t id);
+tp_job_status_t thpool_thread_status(thread_pool_t pool, thpool_id_t id);
 
 /**
- * @brief 
+ * @brief kills a job. If the job has already finished the return will be TPS_RETURNED
+ * 
+ * @param pool pool the job is running on
+ * @param id job id
+ * @return tp_job_status_t previous status of the job after thpool_job_kill
+ */
+tp_job_status_t thpool_job_kill(thread_pool_t pool, thpool_id_t id);
+
+/**
+ * @brief stops the thread the job is being run on 
  * 
  * @param pool pool where the worker resides
  * @param id id of the thread to send SIGSTOP
  * 
  * @return tp_job_status_t previous status of the thread
  */
-tp_job_status_t thp_thread_stop(thread_pool_t pool, thpool_id_t id);
+tp_job_status_t thpool_thread_stop(thread_pool_t pool, thpool_id_t id);
+
+/**
+ * @brief continues a stopped thread
+ * 
+ * @param pool pool which the job is running on
+ * @param id job id
+ * @return tp_job_status_t previous state of the thread, 
+ * or TPS_EINVAL if the thread was not previously stopped
+ */
+tp_job_status_t thpool_thread_cont(thread_pool_t pool, thpool_id_t id);
+
+/**
+ * @brief releases a futures memory, using the future after destruction is undefinde
+ * 
+ * @param pool the pool the job was run on
+ * @param future what will be destroyed
+ */
+void tp_future_destroy(thread_pool_t pool, thpool_future_t future);
 
 /**
  * @brief Register a function to be called on exit of a job.

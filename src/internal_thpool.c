@@ -214,8 +214,12 @@ job_init(struct job* job, void* (*start_routine) (void*),
 static inline void 
 call_exit_funcs(struct job* job, void* ret)
 {
-    for (struct exit_stack* node = job->on_exit; node; node = node->next)
+    for (struct exit_stack* node = job->on_exit; node; ) {
         node->on_exit(ret, node->arg);
+        struct exit_stack* temp = node;
+        node = node->next;
+        free(temp);
+    }
 
 }
 
@@ -223,6 +227,7 @@ void
 job_return(struct job* job, void* ret)
 {
     call_exit_funcs(job, ret);
+
 
     if ( !job_is_future(job) ) {
         job_destroy(job);
@@ -232,7 +237,7 @@ job_return(struct job* job, void* ret)
     job->status = TPS_RETURNED;
     job->return_value = ret;
 
-    (void) pthread_cond_broadcast(&job->returned);
+    (void) pthread_cond_signal(&job->returned);
 }
 
 void 
@@ -240,6 +245,14 @@ job_destroy(struct job* job)
 {
     (void) pthread_mutex_destroy(&job->mutex);
     (void) pthread_cond_destroy(&job->returned);
+
+    
+    for (struct exit_stack* curr = job->on_exit; curr; ) {
+        struct exit_stack* temp = curr;
+        curr = curr->next;
+        free(temp);
+    }
+
 
     if (job->attr->free_returned)
         job->attr->free_returned(job->return_value);
@@ -272,10 +285,6 @@ thread_list_init(struct thread_pool* tp, unsigned num)
     
     return curr->next = head;
 }
-
-// todo
-#define get_ncpus() 2
-
 
 bool 
 thpool_removing_threads(struct thread_pool* pool)

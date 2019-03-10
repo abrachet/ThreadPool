@@ -1,7 +1,8 @@
 TARGET = test
-WARNING = -Wall -Wshadow --pedantic -Wvla -Wno-nullability-extension
+WARNING = -Wall -Wshadow --pedantic -Wvla 
+#-Wno-nullability-extension
 DEFINES = -DDEBUG
-GCC = gcc -g -std=c11 $(WARNING) $(DEFINES)
+GCC = clang -g -std=c11 $(WARNING)
 
 
 SRCS = internal_thpool.c thpool.c worker.c main.c
