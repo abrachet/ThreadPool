@@ -34,6 +34,7 @@ static void
 thpool_kill_handler(int sig)
 {
     longjmp(thlocal_jmp, 0);
+    signal(SIGUSR1, &thpool_kill_handler);
 }
 
 int 
